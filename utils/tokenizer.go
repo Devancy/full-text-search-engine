@@ -16,6 +16,7 @@ func tokenize(text string) []string {
 // analyze analyzes the text and returns a slice of tokens.
 func analyze(text string) []string {
 	tokens := tokenize(text)
+	tokens = characterFilter(tokens)
 	tokens = lowercaseFilter(tokens)
 	tokens = stopwordFilter(tokens)
 	tokens = stemmerFilter(tokens)
