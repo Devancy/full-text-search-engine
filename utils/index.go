@@ -1,59 +1,137 @@
 package utils
 
-// Index is an inverted index. It maps tokens to document IDs.
-type Index map[string][]int
+import (
+	"math"
+	"sort"
+)
 
-// add adds documents to the Index.
-func (idx Index) Add(docs []document) {
+// IndexEntry stores document IDs and their frequencies
+type IndexEntry struct {
+	DocIDs []int
+	Freqs  []float64
+}
+
+// Index is an inverted index. It maps tokens to document IDs and their frequencies.
+type Index struct {
+	entries  map[string]*IndexEntry
+	docCount int
+}
+
+// NewIndex creates a new Index instance
+func NewIndex() *Index {
+	return &Index{
+		entries: make(map[string]*IndexEntry),
+	}
+}
+
+func (idx *Index) Clear() {
+	idx.entries = make(map[string]*IndexEntry)
+	idx.docCount = 0
+}
+
+func (idx *Index) Stats() IndexStats {
+	return IndexStats{
+		DocumentCount: idx.docCount,
+		TermCount:     len(idx.entries),
+	}
+}
+
+// Add adds documents to the Index with TF-IDF scoring
+func (idx *Index) Add(docs []*Document) {
+	if len(docs) == 0 {
+		return
+	}
+
+	// Update document count for IDF calculation
+	idx.docCount += len(docs)
+
 	for _, doc := range docs {
-		for _, token := range analyze(doc.Text) {
-			ids := idx[token]
-			if ids != nil && ids[len(ids)-1] == doc.ID {
-				// Don't add same ID twice.
-				continue
+
+		// Count token frequencies in document
+		tokenFreq := make(map[string]int)
+		tokens := analyze(doc.Text)
+		totalTokens := len(tokens)
+		if totalTokens == 0 {
+			continue
+		}
+
+		// Calculate term frequencies
+		for _, token := range tokens {
+			tokenFreq[token]++
+		}
+
+		// Update index with document frequencies
+		for token, freq := range tokenFreq {
+			if idx.entries[token] == nil {
+				idx.entries[token] = &IndexEntry{
+					DocIDs: make([]int, 0, 64),
+					Freqs:  make([]float64, 0, 64),
+				}
 			}
-			idx[token] = append(ids, doc.ID)
+			entry := idx.entries[token]
+
+			entry.DocIDs = append(entry.DocIDs, doc.ID)
+			// Calculate TF as frequency / total tokens in document
+			tf := float64(freq) / float64(totalTokens)
+			entry.Freqs = append(entry.Freqs, tf)
+		}
+	}
+
+	idx.calculateIDF()
+}
+
+// calculateIDF updates term frequencies with IDF scores
+func (idx *Index) calculateIDF() {
+	for _, entry := range idx.entries {
+		// IDF = log(N/(df + 1)) + 1  // Adding 1 to avoid division by zero and negative values
+		idf := math.Log(float64(idx.docCount)/(float64(len(entry.DocIDs))+1.0)) + 1.0
+
+		// Update frequencies with TF-IDF score
+		for i := range entry.Freqs {
+			entry.Freqs[i] *= idf
 		}
 	}
 }
 
-// intersection returns the set intersection between a and b.
-// a and b have to be sorted in ascending order and contain no duplicates.
-func Intersection(a []int, b []int) []int {
-	maxLen := len(a)
-	if len(b) > maxLen {
-		maxLen = len(b)
-	}
-	r := make([]int, 0, maxLen)
-	var i, j int
-	for i < len(a) && j < len(b) {
-		if a[i] < b[j] {
-			i++
-		} else if a[i] > b[j] {
-			j++
-		} else {
-			r = append(r, a[i])
-			i++
-			j++
-		}
-	}
-	return r
+// SearchResult represents a scored search result
+type SearchResult struct {
+	DocID int
+	Score float64
 }
 
-// search queries the Index for the given text.
-func (idx Index) Search(text string) []int {
-	var r []int
-	for _, token := range analyze(text) {
-		if ids, ok := idx[token]; ok {
-			if r == nil {
-				r = ids
-			} else {
-				r = Intersection(r, ids)
+// Search queries the Index for the given text and returns scored results
+func (idx *Index) Search(text string) []SearchResult {
+	tokens := analyze(text)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	// Calculate scores for each matching document
+	scores := make(map[int]float64)
+	for _, token := range tokens {
+		if entry, ok := idx.entries[token]; ok {
+			for i, docID := range entry.DocIDs {
+				scores[docID] += entry.Freqs[i]
 			}
-		} else {
-			// Token doesn't exist.
-			return nil
 		}
 	}
-	return r
+
+	if len(scores) == 0 {
+		return nil
+	}
+
+	results := make([]SearchResult, 0, len(scores))
+	for docID, score := range scores {
+		results = append(results, SearchResult{
+			DocID: docID,
+			Score: score,
+		})
+	}
+
+	// Sort results by score (highest first)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	return results
 }
