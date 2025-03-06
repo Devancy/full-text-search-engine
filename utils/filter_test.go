@@ -17,7 +17,7 @@ func TestLowercaseFilter(t *testing.T) {
 func TestStopwordFilter(t *testing.T) {
 	var (
 		in  = []string{"i", "am", "the", "cat"}
-		out = []string{"am", "cat"}
+		out = []string{"cat"}
 	)
 	assert.Equal(t, out, stopwordFilter(in))
 }

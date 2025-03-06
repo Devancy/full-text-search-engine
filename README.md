@@ -146,14 +146,13 @@ The project includes comprehensive benchmarks to compare performance:
 go test -bench=. ./utils
 
 # Run specific benchmark groups
-go test -bench=BenchmarkIndex ./utils
-go test -bench=BenchmarkIndexLarge ./utils
+go test -bench=BenchmarkIndexAdd ./utils
+go test -bench=BenchmarkIndexAddLarge ./utils
 ```
 
 Benchmark scenarios include:
 - Document indexing (1,000 documents)
-- Search performance (5 different queries)
-- Large-scale indexing (100,000 documents)
+- Large-scale indexing (1000,000 documents)
 - Comparative analysis between simple and concurrent implementations
 
 ## Performance Considerations
