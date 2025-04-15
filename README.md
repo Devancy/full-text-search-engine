@@ -24,6 +24,7 @@ This project was created to learn and demonstrate:
 - Detailed index statistics
 - Comprehensive benchmarking suite
 - Progress reporting and improved error handling
+- **Robust interactive input with line editing, history, and arrow key support using [github.com/chzyer/readline](https://github.com/chzyer/readline)**
 
 ## Code Organization
 
@@ -104,6 +105,7 @@ After indexing completes:
    - Abstract text
    - Clear separation between results
 4. Press Ctrl+C to exit
+5. **Enjoy advanced line editing, history, and arrow key navigation in the search prompt thanks to the readline library!**
 
 ## Implementation Details
 

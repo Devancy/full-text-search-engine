@@ -1,15 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/chzyer/readline"
 	utils "github.com/devancy/full-text-search-engine/utils"
-	"github.com/eiannone/keyboard"
 )
 
 // config holds the application configuration values derived from flags.
@@ -91,56 +93,42 @@ func createAndPopulateIndex(docs []*utils.Document, useConcurrent bool) (utils.I
 
 // runInteractiveSearch handles the main user interaction loop for searching.
 func runInteractiveSearch(idx utils.Indexer, docs []*utils.Document, cfg config) error {
-	if err := keyboard.Open(); err != nil {
-		return fmt.Errorf("failed to initialize keyboard: %w", err)
+	// Set up readline config for interactive input
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "> ",
+		HistoryFile:     ".search_history.tmp",
+		InterruptPrompt: "^C\n",
+		EOFPrompt:       "exit\n",
+		HistoryLimit:    100,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize readline: %w", err)
 	}
-	defer keyboard.Close()
+	defer rl.Close()
 
-	fmt.Println("\nEnter your search query (press Ctrl+C to exit, Enter to search):")
-	fmt.Print("> ")
+	fmt.Println("\nEnter your search query (press Ctrl+C or type 'exit' to quit):")
 
-	var query strings.Builder
 	for {
-		char, key, err := keyboard.GetKey()
-		if err != nil {
-			// Log non-critical keyboard errors and continue
-			log.Printf("Keyboard error: %v", err)
+		line, err := rl.Readline()
+		if err == readline.ErrInterrupt {
+			if len(line) == 0 {
+				fmt.Println("\nExiting...")
+				return nil
+			} else {
+				continue // allow clearing the line with Ctrl+C
+			}
+		}
+		if err == io.EOF || strings.TrimSpace(line) == "exit" {
+			fmt.Println("\nExiting...")
+			return nil
+		}
+		queryString := strings.TrimSpace(line)
+		if queryString == "" {
 			continue
 		}
-
-		switch key {
-		case keyboard.KeyCtrlC:
-			fmt.Println("\nExiting...")
-			return nil // Normal exit
-		case keyboard.KeyEnter:
-			if query.Len() > 0 {
-				queryString := query.String()
-				results := performSearch(idx, queryString)
-				fmt.Printf("\nSearch Results for: %q\n", queryString)
-				displayResults(results, docs, cfg.maxResults)
-				query.Reset()
-				fmt.Println("\nEnter your search query (press Ctrl+C to exit, Enter to search):")
-				fmt.Print("> ")
-			} else {
-				// Handle Enter press when query is empty (do nothing, just reprint prompt)
-				fmt.Print("\r> ")
-			}
-		case keyboard.KeyBackspace, keyboard.KeyBackspace2:
-			if query.Len() > 0 {
-				str := query.String()
-				query.Reset()
-				query.WriteString(str[:len(str)-1])
-				// Clear line and reprint query
-				fmt.Printf("\r%s", strings.Repeat(" ", 100))
-				fmt.Printf("\r> %s", query.String())
-			}
-		default:
-			// Handle printable characters
-			if char != 0 {
-				query.WriteRune(char)
-				fmt.Printf("\r> %s", query.String())
-			}
-		}
+		results := performSearch(idx, queryString)
+		fmt.Printf("\nSearch Results for: %q\n", queryString)
+		displayResults(results, docs, cfg.maxResults)
 	}
 }
 
@@ -152,6 +140,8 @@ func displayResults(results []utils.SearchResult, docs []*utils.Document, pageSi
 	}
 
 	startIndex := 0
+	// Use bufio.Reader for simple key input during pagination
+	reader := bufio.NewReader(os.Stdin)
 displayLoop:
 	for {
 		endIndex := min(startIndex+pageSize, len(results))
@@ -185,23 +175,10 @@ displayLoop:
 			remaining := len(results) - startIndex
 			nextCount := min(remaining, pageSize)
 			fmt.Printf("\nPress Enter for next %d results (%d remaining), or any other key to return to query...\n", nextCount, remaining)
-
-			// Wait for user input for pagination
-			_, pageKey, pageErr := keyboard.GetKey()
-			if pageErr != nil {
-				log.Printf("Keyboard error during pagination: %v", pageErr)
-				break displayLoop
-			}
-
-			switch pageKey {
-			case keyboard.KeyEnter:
+			input, _ := reader.ReadString('\n')
+			if input == "\n" || input == "\r\n" {
 				continue displayLoop // Show next page
-			case keyboard.KeyCtrlC:
-				fmt.Println("\nExiting...")
-				// We need a way to signal exit from here back to main or os.Exit
-				// For simplicity now, just break the display loop. A channel or error return could be better.
-				os.Exit(0) // Force exit if Ctrl+C pressed during pagination
-			default:
+			} else {
 				break displayLoop // Exit pagination loop, return to query prompt
 			}
 		} else { // No more results to display

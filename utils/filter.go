@@ -75,6 +75,8 @@ func stopwordFilter(tokens []string) []string {
 }
 
 // stemmerFilter returns a slice of stemmed tokens.
+// Stemming is the process of reducing a word to its base or root form, which helps normalize words for text analysis.
+// For example, "running," "runner," and "runs" might all be reduced to the root form "run".
 func stemmerFilter(tokens []string) []string {
 	r := make([]string, len(tokens))
 	for i, token := range tokens {

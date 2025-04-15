@@ -80,7 +80,7 @@ func (idx *Index) Add(docs []*Document) {
 	idx.calculateIDF()
 }
 
-// calculateIDF updates term frequencies with IDF scores
+// calculateIDF updates term frequencies with IDF (Inverse Document Frequency) scores
 func (idx *Index) calculateIDF() {
 	for _, entry := range idx.entries {
 		// IDF = log(N/(df + 1)) + 1  // Adding 1 to avoid division by zero and negative values
