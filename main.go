@@ -106,9 +106,8 @@ func runInteractiveSearch(idx utils.Indexer, docs []*utils.Document, cfg config)
 	}
 	defer rl.Close()
 
-	fmt.Println("\nEnter your search query (press Ctrl+C or type 'exit' to quit):")
-
 	for {
+		fmt.Println("\nEnter your search query (press Ctrl+C or type 'exit' to quit):")
 		line, err := rl.Readline()
 		if err == readline.ErrInterrupt {
 			if len(line) == 0 {
