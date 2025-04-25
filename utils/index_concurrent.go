@@ -78,9 +78,10 @@ func (idx *ConcurrentIndex) Add(docs []*Document) {
 
 				// Update index with document frequencies
 				for token, freq := range tokenFreq {
+					// Ensure ConcurrentIndexEntry is created with float32 slice
 					entry, _ := idx.entries.LoadOrStore(token, &ConcurrentIndexEntry{
 						DocIDs: make([]int, 0, 64),
-						Freqs:  make([]float64, 0, 64),
+						Freqs:  make([]float32, 0, 64), // Use float32
 					})
 					indexEntry := entry.(*ConcurrentIndexEntry)
 
@@ -88,8 +89,9 @@ func (idx *ConcurrentIndex) Add(docs []*Document) {
 					indexEntry.Lock()
 					indexEntry.DocIDs = append(indexEntry.DocIDs, doc.ID)
 					// Calculate TF as frequency / total tokens in document
-					tf := float64(freq) / float64(totalTokens)
-					indexEntry.Freqs = append(indexEntry.Freqs, tf)
+					// Cast result to float32 before appending
+					tf := float32(float64(freq) / float64(totalTokens))
+					indexEntry.Freqs = append(indexEntry.Freqs, tf) // Append float32
 					indexEntry.Unlock()
 				}
 			}
@@ -102,25 +104,8 @@ func (idx *ConcurrentIndex) Add(docs []*Document) {
 	close(docChan)
 	wg.Wait()
 
-	idx.calculateIDF()
-}
-
-// calculateIDF updates term frequencies with IDF scores
-func (idx *ConcurrentIndex) calculateIDF() {
-	idx.entries.Range(func(key, value interface{}) bool {
-		entry := value.(*ConcurrentIndexEntry)
-		entry.Lock()
-		defer entry.Unlock()
-
-		// IDF = log(N/(df + 1)) + 1  // Adding 1 to avoid division by zero and negative values
-		idf := math.Log(float64(idx.docCount)/(float64(len(entry.DocIDs))+1.0)) + 1.0
-
-		// Update frequencies with TF-IDF score
-		for i := range entry.Freqs {
-			entry.Freqs[i] *= idf
-		}
-		return true
-	})
+	// TF is stored directly, IDF calculated during Search
+	// idx.calculateIDF()
 }
 
 // Search queries the ConcurrentIndex for the given text and returns scored results
@@ -130,7 +115,7 @@ func (idx *ConcurrentIndex) Search(text string) []SearchResult {
 		return nil
 	}
 
-	scores := make(map[int]float64)
+	scores := make(map[int]float32)
 	var scoresMutex sync.RWMutex
 
 	// Calculate scores for each token
@@ -138,9 +123,21 @@ func (idx *ConcurrentIndex) Search(text string) []SearchResult {
 		if entry, ok := idx.entries.Load(token); ok {
 			indexEntry := entry.(*ConcurrentIndexEntry)
 			indexEntry.RLock()
+
+			// Calculate IDF for the current term
+			// Must read docCount within the lock to ensure consistency if Add is running concurrently
+			// Use RLock on the main index to safely read docCount
+			idx.RLock()
+			docCount := idx.docCount
+			idx.RUnlock()
+
+			// IDF = log(N/(df + 1)) + 1
+			idf := float32(math.Log(float64(docCount)/(float64(len(indexEntry.DocIDs))+1.0)) + 1.0)
+
 			for i, docID := range indexEntry.DocIDs {
 				scoresMutex.Lock()
-				scores[docID] += indexEntry.Freqs[i]
+				// Score is TF (from entry.Freqs) * IDF (calculated now)
+				scores[docID] += indexEntry.Freqs[i] * idf
 				scoresMutex.Unlock()
 			}
 			indexEntry.RUnlock()

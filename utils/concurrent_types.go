@@ -6,5 +6,5 @@ import "sync"
 type ConcurrentIndexEntry struct {
 	sync.RWMutex
 	DocIDs []int
-	Freqs  []float64
+	Freqs  []float32
 }

@@ -8,7 +8,7 @@ import (
 // IndexEntry stores document IDs and their frequencies
 type IndexEntry struct {
 	DocIDs []int
-	Freqs  []float64
+	Freqs  []float32
 }
 
 // Index is an inverted index. It maps tokens to document IDs and their frequencies.
@@ -65,30 +65,15 @@ func (idx *Index) Add(docs []*Document) {
 			if idx.entries[token] == nil {
 				idx.entries[token] = &IndexEntry{
 					DocIDs: make([]int, 0, 64),
-					Freqs:  make([]float64, 0, 64),
+					Freqs:  make([]float32, 0, 64),
 				}
 			}
 			entry := idx.entries[token]
 
 			entry.DocIDs = append(entry.DocIDs, doc.ID)
 			// Calculate TF as frequency / total tokens in document
-			tf := float64(freq) / float64(totalTokens)
+			tf := float32(float64(freq) / float64(totalTokens))
 			entry.Freqs = append(entry.Freqs, tf)
-		}
-	}
-
-	idx.calculateIDF()
-}
-
-// calculateIDF updates term frequencies with IDF (Inverse Document Frequency) scores
-func (idx *Index) calculateIDF() {
-	for _, entry := range idx.entries {
-		// IDF = log(N/(df + 1)) + 1  // Adding 1 to avoid division by zero and negative values
-		idf := math.Log(float64(idx.docCount)/(float64(len(entry.DocIDs))+1.0)) + 1.0
-
-		// Update frequencies with TF-IDF score
-		for i := range entry.Freqs {
-			entry.Freqs[i] *= idf
 		}
 	}
 }
@@ -96,7 +81,7 @@ func (idx *Index) calculateIDF() {
 // SearchResult represents a scored search result
 type SearchResult struct {
 	DocID int
-	Score float64
+	Score float32
 }
 
 // Search queries the Index for the given text and returns scored results
@@ -107,11 +92,15 @@ func (idx *Index) Search(text string) []SearchResult {
 	}
 
 	// Calculate scores for each matching document
-	scores := make(map[int]float64)
+	scores := make(map[int]float32)
 	for _, token := range tokens {
 		if entry, ok := idx.entries[token]; ok {
+			// Calculate IDF for the current term
+			// IDF = log(N/(df + 1)) + 1
+			idf := float32(math.Log(float64(idx.docCount)/(float64(len(entry.DocIDs))+1.0)) + 1.0)
 			for i, docID := range entry.DocIDs {
-				scores[docID] += entry.Freqs[i]
+				// Score is TF (from entry.Freqs) * IDF (calculated now)
+				scores[docID] += entry.Freqs[i] * idf
 			}
 		}
 	}
